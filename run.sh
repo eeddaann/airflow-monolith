@@ -1,6 +1,8 @@
 #!/bin/bash
 
-
+# verify dags
+python /opt/airflow/dags/oracle_dag.py
+python /opt/airflow/dags/sample_dag.py
 # init airflow db
 echo "init airflow db"
 airflow db init
