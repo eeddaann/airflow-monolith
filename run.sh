@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# verify dags
-python /opt/airflow/dags/oracle_dag.py
-python /opt/airflow/dags/sample_dag.py
 # init airflow db
 echo "init airflow db"
 airflow db init
@@ -13,6 +10,15 @@ airflow users create \
     --email foo@bar.com --firstname foo \
     --lastname bar --password airflow \
     --role Admin --username airflow
+
+echo "update oracle connection"
+airflow connections add "oracle_demo" \
+                    --conn-type "oracle" \
+                    --conn-host "0.0.0.0" \
+                    --conn-login "username" \
+                    --conn-password "password" \
+                    --conn-schema "myschema" \
+                    --conn-port "1521"
 
 # Start the scheduler
 echo "starting scheduler on background"
