@@ -12,6 +12,15 @@ airflow users create \
     --lastname bar --password airflow \
     --role Admin --username airflow
 
+echo "update postgres connection"
+airflow connections add "postgres_demo" \
+                    --conn-type "postgres" \
+                    --conn-host "172.18.0.1" \
+                    --conn-login "postgres" \
+                    --conn-password "password" \
+                    --conn-schema "postgres" \
+                    --conn-port "5433"
+
 # Start the scheduler
 echo "starting scheduler on background"
 sh -c "airflow scheduler" &

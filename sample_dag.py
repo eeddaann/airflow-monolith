@@ -1,87 +1,95 @@
-from datetime import timedelta
-from textwrap import dedent
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 
-# The DAG object; we'll need this to instantiate a DAG
+# [START postgres_operator_howto_guide]
+import datetime
+
 from airflow import DAG
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.operators.email_operator import EmailOperator
 
-# Operators; we need this to operate!
-from airflow.operators.bash import BashOperator
-from airflow.utils.dates import days_ago
-# These args will get passed on to each operator
-# You can override them on a per-task basis during operator initialization
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'email': ['airflow@example.com'],
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
-    # 'queue': 'bash_queue',
-    # 'pool': 'backfill',
-    # 'priority_weight': 10,
-    # 'end_date': datetime(2016, 1, 1),
-    # 'wait_for_downstream': False,
-    # 'dag': dag,
-    # 'sla': timedelta(hours=2),
-    # 'execution_timeout': timedelta(seconds=300),
-    # 'on_failure_callback': some_function,
-    # 'on_success_callback': some_other_function,
-    # 'on_retry_callback': another_function,
-    # 'sla_miss_callback': yet_another_function,
-    # 'trigger_rule': 'all_success'
-}
+# create_pet_table, populate_pet_table, get_all_pets, and get_birth_date are examples of tasks created by
+# instantiating the Postgres Operator
+
 with DAG(
-    'tutorial',
-    default_args=default_args,
-    description='A simple tutorial DAG',
-    schedule_interval=timedelta(days=1),
-    start_date=days_ago(2),
-    tags=['example'],
+    dag_id="postgres_operator_dag",
+    start_date=datetime.datetime(2020, 2, 2),
+    schedule_interval="@once",
+    catchup=False,
 ) as dag:
 
-    # t1, t2 and t3 are examples of tasks created by instantiating operators
-    t1 = BashOperator(
-        task_id='print_date',
-        bash_command='date',
+    create_pet_table = PostgresOperator(
+        task_id="create_pet_table",
+        postgres_conn_id="postgres_demo",
+        sql="""
+            CREATE TABLE IF NOT EXISTS pet (
+            pet_id SERIAL PRIMARY KEY,
+            name VARCHAR NOT NULL,
+            pet_type VARCHAR NOT NULL,
+            birth_date DATE NOT NULL,
+            OWNER VARCHAR NOT NULL);
+          """,
     )
 
-    t2 = BashOperator(
-        task_id='sleep',
-        depends_on_past=False,
-        bash_command='sleep 5',
-        retries=3,
-    )
-    t1.doc_md = dedent(
-        """\
-    #### Task Documentation
-    You can document your task using the attributes `doc_md` (markdown),
-    `doc` (plain text), `doc_rst`, `doc_json`, `doc_yaml` which gets
-    rendered in the UI's Task Instance Details page.
-    ![img](http://montcs.bloomu.edu/~bobmon/Semesters/2012-01/491/import%20soul.png)
-
-    """
+    create_owners_table = PostgresOperator(
+        task_id="create_owners_table",
+        postgres_conn_id="postgres_demo",
+        sql="""
+            CREATE TABLE IF NOT EXISTS owner (
+            owner_id SERIAL PRIMARY KEY,
+            name VARCHAR NOT NULL,
+            preferred_pet_type VARCHAR NOT NULL);
+          """,
     )
 
-    dag.doc_md = __doc__  # providing that you have a docstring at the beggining of the DAG
-    dag.doc_md = """
-    This is a documentation placed anywhere
-    """  # otherwise, type it like this
-    templated_command = dedent(
-        """
-    {% for i in range(5) %}
-        echo "{{ ds }}"
-        echo "{{ macros.ds_add(ds, 7)}}"
-        echo "{{ params.my_param }}"
-    {% endfor %}
-    """
+    populate_pet_table = PostgresOperator(
+        task_id="populate_pet_table",
+        postgres_conn_id="postgres_demo",
+        sql="""
+            INSERT INTO pet VALUES ( DEFAULT, 'Max', 'Dog', '2018-07-05', 'Jane');
+            INSERT INTO pet VALUES ( DEFAULT, 'Susie', 'Cat', '2019-05-01', 'Phil');
+            INSERT INTO pet VALUES ( DEFAULT, 'Lester', 'Hamster', '2020-06-23', 'Lily');
+            INSERT INTO pet VALUES ( DEFAULT, 'Quincy', 'Parrot', '2013-08-11', 'Anne');
+            """,
     )
 
-    t3 = BashOperator(
-        task_id='templated',
-        depends_on_past=False,
-        bash_command=templated_command,
-        params={'my_param': 'Parameter I passed in'},
+    populate_owners_table = PostgresOperator(
+        task_id="populate_owners_table",
+        postgres_conn_id="postgres_demo",
+        sql="""
+            INSERT INTO owner VALUES ( DEFAULT, 'Max', 'Dog');
+            INSERT INTO owner VALUES ( DEFAULT, 'Susie', 'Cat');
+            INSERT INTO owner VALUES ( DEFAULT, 'Lester', 'Hamster');
+            INSERT INTO owner VALUES ( DEFAULT, 'Quincy', 'Parrot');
+            """,
     )
 
-    t1 >> [t2, t3]
+    get_all_pets = PostgresOperator(
+        task_id="get_all_pets", postgres_conn_id="postgres_demo", sql="SELECT * FROM pet;"
+    )
+
+    send_email = EmailOperator(
+        task_id='send_email',
+        to='to@gmail.com',
+        subject='Pets & owners tables created',
+        html_content=""" <h3>Email Test</h3> """
+    )
+
+
+    create_pet_table >> populate_pet_table >> get_all_pets >> send_email
+    create_owners_table >> populate_owners_table >> get_all_pets
+    # [END postgres_operator_howto_guide]
